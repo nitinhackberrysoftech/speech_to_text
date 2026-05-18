@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-
 <title>Voice Chatbot Fixed</title>
 
 <style>
@@ -55,8 +54,8 @@ body{
 
 <div class="input-area">
   <input id="userInput" placeholder="Speak or type..." />
-  <button id="startBtn">🎤</button>
-  <button id="stopBtn">⏹</button>
+  <button id="startBtn">🎤 Start</button>
+  <button id="stopBtn">⏹ Stop</button>
   <button id="downloadBtn">⬇</button>
   <button id="sendBtn">Send</button>
 </div>
@@ -75,25 +74,23 @@ const SpeechRecognition =
   window.SpeechRecognition || window.webkitSpeechRecognition;
 
 let recognition;
+let isListening = false;
 
 let liveTextFile = "";
 let lastSavedText = "";
-
-/* ---------------- SPEECH ---------------- */
 
 if (SpeechRecognition) {
 
   recognition = new SpeechRecognition();
 
   recognition.continuous = true;
-  recognition.interimResults = true;
+  recognition.interimResults = false;
   recognition.lang = "gu-IN";
 
   recognition.onresult = (event) => {
 
     let finalText = "";
 
-    // 🔥 ONLY FINAL RESULTS (no duplicates)
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
         finalText += event.results[i][0].transcript + " ";
@@ -103,23 +100,34 @@ if (SpeechRecognition) {
     finalText = finalText.trim();
 
     if (finalText) {
-
       userInput.value = finalText;
-
       addUser(finalText);
-
       updateLiveFile(finalText);
     }
   };
+
+  // 🔥 IMPORTANT FIX: auto restart mic if not stopped manually
+  recognition.onend = () => {
+    if (isListening) {
+      recognition.start();
+    }
+  };
+
 }
 
-/* ---------------- START / STOP ---------------- */
+/* ---------------- START ---------------- */
 
 startBtn.onclick = () => {
+  if (!recognition) return;
+
+  isListening = true;
   recognition.start();
 };
 
+/* ---------------- STOP ---------------- */
+
 stopBtn.onclick = () => {
+  isListening = false;
   recognition.stop();
 };
 
@@ -154,14 +162,13 @@ function addBot(msg){
   chatContainer.appendChild(div);
 }
 
-/* ---------------- 🔥 FIXED LIVE FILE ---------------- */
+/* ---------------- FILE ---------------- */
 
 function updateLiveFile(text){
 
   text = text.trim();
   if (!text) return;
 
-  // ❌ prevent duplicate save
   if (text === lastSavedText) return;
 
   liveTextFile += text + "\n";
