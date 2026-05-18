@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Voice Recorder → API Extractor</title>
+
+<style>
+body{
+  margin:0;
+  font-family:Arial;
+  background:#0b1220;
+  color:#e5e7eb;
+}
+
+.header{
+  padding:15px;
+  background:#111827;
+  font-size:18px;
+  font-weight:bold;
+  border-bottom:1px solid #1f2937;
+}
+
+.container{
+  display:flex;
+  height:calc(100vh - 60px);
+}
+
+/* LEFT */
+.left{
+  width:35%;
+  padding:20px;
+  border-right:1px solid #1f2937;
+}
+
+.panel{
+  background:#0f172a;
+  padding:15px;
+  border-radius:12px;
+  border:1px solid #1f2937;
+}
+
+button{
+  width:100%;
+  margin-top:10px;
+  padding:10px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:bold;
+}
+
+.start{background:#22c55e;color:white;}
+.stop{background:#ef4444;color:white;}
+.submit{background:#3b82f6;color:white;}
+
+button:hover{opacity:0.9;}
+
+.status{
+  margin-top:10px;
+  font-size:14px;
+  color:#facc15;
+}
+
+/* RIGHT */
+.right{
+  width:65%;
+  padding:20px;
+  overflow:auto;
+}
+
+.card{
+  background:#111827;
+  padding:12px;
+  margin-bottom:10px;
+  border-radius:10px;
+  border:1px solid #1f2937;
+}
+
+.title{
+  color:#60a5fa;
+  font-weight:bold;
+  margin-bottom:5px;
+}
+
+pre{
+  white-space:pre-wrap;
+  color:#d1d5db;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">🎤 Voice Recorder → Medical API Extractor</div>
+
+<div class="container">
+
+  <!-- LEFT -->
+  <div class="left">
+
+    <div class="panel">
+
+      <h3>Audio Recorder</h3>
+
+      <button class="start" onclick="startRecording()">🎤 Start Recording</button>
+      <button class="stop" onclick="stopRecording()">⏹ Stop Recording</button>
+      <button class="submit" onclick="submitAudio()">📤 Submit to API</button>
+
+      <div class="status" id="status">Idle</div>
+
+      <audio id="audioPlayback" controls style="width:100%; margin-top:10px;"></audio>
+
+    </div>
+
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right" id="resultArea">
+    <h3>📋 API Response</h3>
+    <p>No data yet</p>
+  </div>
+
+</div>
+
+<script>
+
+const API_URL = "http://192.168.29.201:8000//extract";
+
+let mediaRecorder;
+let audioChunks = [];
+let audioBlob = null;
+
+const statusBox = document.getElementById("status");
+const audioPlayback = document.getElementById("audioPlayback");
+const resultArea = document.getElementById("resultArea");
+
+/* ---------------- START RECORDING ---------------- */
+
+async function startRecording(){
+
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+  mediaRecorder = new MediaRecorder(stream);
+  audioChunks = [];
+
+  mediaRecorder.ondataavailable = e => {
+    audioChunks.push(e.data);
+  };
+
+  mediaRecorder.onstop = () => {
+
+    audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+
+    const audioURL = URL.createObjectURL(audioBlob);
+    audioPlayback.src = audioURL;
+
+    statusBox.innerText = "Recording stopped ✔ Ready to submit";
+  };
+
+  mediaRecorder.start();
+  statusBox.innerText = "Recording... 🔴";
+}
+
+/* ---------------- STOP RECORDING ---------------- */
+
+function stopRecording(){
+  if(mediaRecorder && mediaRecorder.state !== "inactive"){
+    mediaRecorder.stop();
+  }
+}
+
+/* ---------------- SUBMIT AUDIO ---------------- */
+
+async function submitAudio(){
+
+  if(!audioBlob){
+    alert("Please record audio first");
+    return;
+  }
+
+  const formData = new FormData();
+
+  // convert to file
+  const file = new File([audioBlob], "recording.webm", {
+    type: "audio/webm"
+  });
+
+  formData.append("file", file);
+
+  statusBox.innerText = "Uploading to API... ⏳";
+
+  resultArea.innerHTML = "<h3>📋 API Response</h3><p>Processing...</p>";
+
+  try{
+
+    const res = await fetch(API_URL, {
+      method: "POST",
+      body: formData,
+      headers: {
+        "accept": "application/json"
+      }
+    });
+
+    if(!res.ok){
+      throw new Error("API Error: " + res.status);
+    }
+
+    const data = await res.json();
+
+    renderResult(data);
+
+    statusBox.innerText = "Done ✔";
+
+  }catch(err){
+    statusBox.innerText = "Error ❌";
+    resultArea.innerHTML = "<p style='color:red'>" + err.message + "</p>";
+  }
+}
+
+/* ---------------- RENDER RESPONSE ---------------- */
+
+function renderResult(data){
+
+  let html = "<h3>📋 Extracted Medical Report</h3>";
+
+  for(const key in data){
+    html += `
+      <div class="card">
+        <div class="title">${key}</div>
+        <div>${data[key] || "-"}</div>
+      </div>
+    `;
+  }
+
+  resultArea.innerHTML = html;
+}
+
+</script>
+
+</body>
+</html>
